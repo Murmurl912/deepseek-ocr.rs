@@ -29,6 +29,7 @@ use crate::{
     },
 };
 use deepseek_ocr_core::{
+    CancellationToken,
     benchmark::Timer,
     inference::{
         DecodeOutcome, DecodeParameters, ModelKind, ModelLoadArgs, OcrEngine, VisionSettings,
@@ -126,6 +127,7 @@ pub struct GenerateOptions<'a> {
     pub max_new_tokens: usize,
     pub eos_token_id: Option<i64>,
     pub progress_callback: Option<&'a dyn Fn(usize, &[i64])>,
+    pub cancel: Option<CancellationToken>,
     pub use_cache: bool,
     pub temperature: f64,
     pub top_p: Option<f64>,
@@ -147,6 +149,7 @@ impl<'a> GenerateOptions<'a> {
             max_new_tokens,
             eos_token_id: None,
             progress_callback: None,
+            cancel: None,
             use_cache: true,
             temperature: 1.0,
             top_p: None,
@@ -1543,11 +1546,21 @@ impl DeepseekOcrModel {
             return self.generate_without_cache(input_ids, options);
         }
         let progress_callback = options.progress_callback;
+        let cancel_signal = options.cancel.as_ref();
         if options.max_new_tokens == 0 {
             total_timer.finish(|event| {
                 event.add_field("prompt_tokens", seq_len as u64);
                 event.add_field("max_new_tokens", 0u64);
                 event.add_field("generated_tokens", 0u64);
+            });
+            return self.empty_generation();
+        }
+        if is_cancelled(cancel_signal) {
+            total_timer.finish(|event| {
+                event.add_field("prompt_tokens", seq_len as u64);
+                event.add_field("generated_tokens", 0u64);
+                event.add_field("max_new_tokens", options.max_new_tokens as u64);
+                event.add_field("terminated_on_prefill", true);
             });
             return self.empty_generation();
         }
@@ -1617,6 +1630,9 @@ impl DeepseekOcrModel {
         let mut generated = Vec::with_capacity(options.max_new_tokens);
         let decode_timer = Timer::new("decode.iterative");
         for step in 0..options.max_new_tokens {
+            if is_cancelled(cancel_signal) {
+                break;
+            }
             context_tokens.push(current);
             generated.push(current);
             if let Some(cb) = progress_callback {
@@ -1700,6 +1716,17 @@ impl DeepseekOcrModel {
             options.position_ids.is_none(),
             "generate without cache requires position_ids to be computed internally"
         );
+
+        let cancel_signal = options.cancel.as_ref();
+        if is_cancelled(cancel_signal) {
+            total_timer.finish(|event| {
+                event.add_field("prompt_tokens", seq_len as u64);
+                event.add_field("generated_tokens", 0u64);
+                event.add_field("max_new_tokens", options.max_new_tokens as u64);
+                event.add_field("use_cache", false);
+            });
+            return self.empty_generation();
+        }
 
         let token_rows = input_ids
             .to_dtype(DType::I64)?
@@ -1837,6 +1864,9 @@ impl DeepseekOcrModel {
         let progress_callback = options.progress_callback;
         let mut generated = Vec::with_capacity(options.max_new_tokens);
         for step in 0..options.max_new_tokens {
+            if is_cancelled(cancel_signal) {
+                break;
+            }
             generated.push(current);
             if let Some(cb) = progress_callback {
                 cb(generated.len(), &generated);
@@ -1907,6 +1937,10 @@ impl DeepseekOcrModel {
     fn empty_generation(&self) -> Result<Tensor> {
         Ok(Tensor::from_vec(Vec::<i64>::new(), (1, 0), self.device())?.to_dtype(DType::I64)?)
     }
+}
+
+fn is_cancelled(token: Option<&CancellationToken>) -> bool {
+    token.map_or(false, |t| t.is_cancelled())
 }
 
 fn round_ties_to_even(value: f64) -> f64 {
@@ -1996,6 +2030,7 @@ impl deepseek_ocr_core::inference::OcrEngine for DeepseekOcrModel {
         vision: VisionSettings,
         params: &DecodeParameters,
         stream: Option<&dyn Fn(usize, &[i64])>,
+        cancel: Option<&CancellationToken>,
     ) -> Result<DecodeOutcome> {
         let owned_inputs = prepare_vision_inputs(
             self,
@@ -2041,6 +2076,7 @@ impl deepseek_ocr_core::inference::OcrEngine for DeepseekOcrModel {
         options.no_repeat_ngram_size = params.no_repeat_ngram_size;
         options.seed = params.seed;
         options.progress_callback = stream;
+        options.cancel = cancel.cloned();
 
         let generated = self.generate(&input_ids, options)?;
         let generated_tokens = generated

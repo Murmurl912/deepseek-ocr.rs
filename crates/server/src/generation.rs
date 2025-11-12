@@ -98,6 +98,7 @@ fn generate_blocking(
         vision,
         &params,
         callback_box.as_deref(),
+        None,
     );
     drop(callback_box);
 

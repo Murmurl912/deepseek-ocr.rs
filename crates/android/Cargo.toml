@@ -1,0 +1,28 @@
+[package]
+name = "deepseek-ocr-android"
+version = "0.1.0"
+edition = "2024"
+description = "Android-friendly DeepSeek-OCR bindings and CLI"
+autobins = false
+
+[lib]
+crate-type = ["rlib", "cdylib"]
+
+[[bin]]
+name = "android-cli"
+path = "src/bin/android_cli.rs"
+
+[dependencies]
+anyhow = { workspace = true }
+candle-core = { workspace = true }
+clap = { workspace = true }
+deepseek-ocr-core = { workspace = true }
+deepseek-ocr-infer-deepseek = { path = "../infer-deepseek" }
+deepseek-ocr-infer-paddleocr = { path = "../infer-paddleocr" }
+image = { workspace = true }
+thiserror = "1.0"
+tokenizers = { workspace = true }
+uniffi = "0.30"
+
+[build-dependencies]
+uniffi = { version = "0.30", features = ["build"] }

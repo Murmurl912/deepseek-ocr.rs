@@ -16,6 +16,7 @@ use crate::{
     vision::{SiglipPreprocessConfig, SiglipProjector, SiglipVisionModel, preprocess_image},
 };
 use deepseek_ocr_core::{
+    CancellationToken,
     inference::{
         DecodeOutcome, DecodeParameters, ModelKind, ModelLoadArgs, OcrEngine, VisionSettings,
         normalize_text,
@@ -268,11 +269,21 @@ impl OcrEngine for PaddleOcrModel {
         vision: VisionSettings,
         params: &DecodeParameters,
         stream: Option<&dyn Fn(usize, &[i64])>,
+        cancel: Option<&CancellationToken>,
     ) -> Result<DecodeOutcome> {
         ensure!(
             params.use_cache,
             "PaddleOCR decoder currently requires use_cache=true"
         );
+        let cancelled = || cancel.map_or(false, |token| token.is_cancelled());
+        if cancelled() {
+            return Ok(DecodeOutcome {
+                text: String::new(),
+                prompt_tokens: 0,
+                response_tokens: 0,
+                generated_tokens: Vec::new(),
+            });
+        }
         let eos_token_id = resolve_eos_token_id(self.config(), tokenizer);
         let encoded_images = self.encode_images(images, vision)?;
         let prepared = self.prepare_prompt(tokenizer, prompt, &encoded_images)?;
@@ -321,6 +332,9 @@ impl OcrEngine for PaddleOcrModel {
         }
 
         while generated.len() < params.max_new_tokens {
+            if cancelled() {
+                break;
+            }
             context_tokens.push(current);
             generated.push(current);
             if let Some(callback) = stream {

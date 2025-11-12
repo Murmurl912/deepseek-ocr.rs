@@ -205,6 +205,7 @@ pub fn run(args: Args) -> Result<()> {
             vision_settings,
             &decode_params,
             callback_holder.as_deref(),
+            None,
         )
         .context("generation failed")?;
     let elapsed = gen_start.elapsed();

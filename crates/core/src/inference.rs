@@ -4,7 +4,10 @@ use image::DynamicImage;
 use serde::{Deserialize, Serialize};
 use tokenizers::Tokenizer;
 
-use crate::{benchmark::Timer, conversation::get_conv_template, sampling::TokenSelectionParams};
+use crate::{
+    benchmark::Timer, cancellation::CancellationToken, conversation::get_conv_template,
+    sampling::TokenSelectionParams,
+};
 
 /// Vision pre-processing knobs shared across OCR backends.
 #[derive(Debug, Clone, Copy)]
@@ -115,6 +118,7 @@ pub trait OcrEngine: Send {
         vision: VisionSettings,
         params: &DecodeParameters,
         stream: Option<&dyn Fn(usize, &[i64])>,
+        cancel: Option<&CancellationToken>,
     ) -> Result<DecodeOutcome>;
 }
 

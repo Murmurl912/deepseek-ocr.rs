@@ -7,6 +7,7 @@ members = [
     "crates/config",
     "crates/infer-deepseek",
     "crates/infer-paddleocr",
+    "crates/config", "crates/android",
 ]
 resolver = "2"
 

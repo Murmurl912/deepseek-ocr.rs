@@ -1,5 +1,6 @@
 pub mod benchmark;
 pub mod cache;
+pub mod cancellation;
 pub mod conversation;
 pub mod inference;
 pub mod runtime;
@@ -7,6 +8,7 @@ pub mod sampling;
 pub mod streaming;
 pub mod tensor;
 
+pub use cancellation::CancellationToken;
 pub use inference::{
     DecodeOutcome, DecodeParameters, ModelKind, ModelLoadArgs, OcrEngine, VisionSettings,
     normalize_text, render_prompt,
