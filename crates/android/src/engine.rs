@@ -189,7 +189,7 @@ impl AndroidOcrEngine {
 
 fn load_backend(config: &EngineModelConfig) -> Result<Box<dyn OcrEngine>> {
     let device = Device::Cpu;
-    let dtype = DType::F32;
+    let dtype = DType::F16;
     let load_args = ModelLoadArgs {
         kind: config.kind,
         config_path: Some(config.config_path.as_path()),
